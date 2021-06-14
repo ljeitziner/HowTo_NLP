@@ -1,0 +1,574 @@
+---
+title: "R Markdown"
+author: "Loris Jeitziner"
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+
+# How To
+
+This markdown was created for the reader to learn and understand the mechanics of acquiring Tweets and process the content of the Tweets for a subsequent Sentiment Analysis. Don't hesitate to ask my anything, if questions arise loris.jeitziner@unibas.ch
+
+## Twitter Mining
+
+In the first step in this tutorial, the **rtweet** package will be introduced. With the **rtweet** package, one can download a batch of Tweets through the Twitter API. To be able to download Tweets, you need an account on twitter. 
+
+
+In the first step, install the **rtweet** package and load it into your library. 
+
+
+```{r lr, include=TRUE, echo=TRUE}
+
+#Install the package, uncomment the next line if necessary  
+# install.packages("rtweet")
+
+#Load library
+library(rtweet)
+
+```
+
+Further, it is recommended to load the tidyverse package, since it makes everything much easier. Install the package first, if you have not done that already. 
+
+```{r include=TRUE, echo=FALSE}
+
+#Load library
+library(tidyverse)
+
+```
+
+
+
+The only function from the **rtweet** we use is search_tweets(). With this function we can define the following arguments, please consider the R Documentation for further information:
+
+* q (query)
+* n (number of tweets)
+* type 
+* geocode
+* include_rts
+* max_id
+* token
+* retryonratelimit
+* lang
+
+#### q
+
+The argument *q* (query) is used to define, which Tweets should be searched. It is possible to use multiple keywords. Note, that the space between keywoards is used as a logical "AND" operator. To use the logical "OR" operator, write OR between the keywords. 
+
+For instance:
+With a query of *Roger Federer*, Tweets are searched which contain both *Roger* AND *Federer*. The query *Roger OR Federer* would search for Tweets that contain either *Roger* or *Federer* or both. 
+
+Some other useful query tips:
+
+* Exclude retweets via "-filter:retweets"
+* Exclude quotes via "-filter:quote"
+* Exclude replies via "-filter:replies"
+* Filter (return only) verified via "filter:verified"
+* Exclude verified via "-filter:verified"
+* Get everything (firehose for free) via "-filter:verified OR filter:verified"
+* Filter (return only) tweets with links to news articles via "filter:news"
+* Filter (return only) tweets with media "filter:media"
+
+#### n
+
+The argument *n* describes the number of Tweets that should be searched for. The default is set to 100, and the maximum, restricted by the Twitter API, is 18'000. To download more Tweets, consider the retryonratelimit argument.
+
+#### type
+
+The type argument is used to define, whether the Tweets should be *recent*, *popular* or *mixed*. See Twitter's REST API for further information. 
+
+#### geocode
+
+The geocode is used to explicitally define the location of the Tweets to be searched. You may define the latitude, longitude und the radius. For instance, to look for mostly Swiss-German Tweets, one could define Lucerne as the center of the radius with the geocode of *47.05,8.27* and the radius of *100km*. The following image illustrates the locations that are included in that geocode.
+
+![Radius_CH](../1_data/radius.PNG)    
+
+
+#### include_rts
+
+With that you may define to exclude retweets. 
+
+#### max_id
+
+This argument is useful when downloading Tweets over multiple iterations. Max_id can be defined as the last downloaded Tweet to continue where the previous iteration left of. 
+
+#### token
+
+This argument is by default =NULL, which then just opens a browser window to acquire your Twitter authentication. 
+
+#### retryonratelimit
+
+When the download exceeds the maximum defined by the Twitter API, the *retryonratelimit* argument may be set on true, to wait with the download, until it is available again. 
+
+#### lang
+
+With this argument you can define the language of the Tweets. For instance, *lang = "en"* indicates that only english Tweets should be looked for. 
+
+### Example
+
+The following example indicates to look for Tweets, that contain the keywords *Roger* or *Federer* (or change them if you want). 10 Tweets should be acquired for this demonstration and they should be in english. The geocode indicates Switzerland. We do not want to include retweets and recent but popular Tweets should be searched. 
+*If the reader of this notebook does not find any Tweets with those keywords, change them until you find some. *
+
+```{r}
+token = get_token()
+
+d = search_tweets(
+  q = "Roger OR Federer", 
+  n = 10, 
+  lang = "en",
+  geocode = "47.05,8.27,100km",              
+  include_rts = FALSE, 
+  type = "recent",
+  token = token
+)
+```
+
+You can take a look at the new dataframe *d*. 
+
+But since we want to have a larger corpus, let's refrain from using keywords an just mine all the available tweets. Also, let's enhance the number of tweets to 10'000 (the maximum). 
+
+```{r}
+d = search_tweets(
+  q = "", 
+  n = 10000, 
+  lang = "en",
+  geocode = "",              
+  include_rts = FALSE, 
+  type = "recent",
+  token = token
+)
+
+```
+
+
+Now we should be in possession of around 10'000 swiss-german tweets. In the following, we collapse the dataframe for further usage, and also save a copy of the dataframe as a .csv file in the working directory under */3_tweets/*. The filename is based on the current date, so don't be afraid of overwriting old files. 
+
+```{r}
+#collapse the dataframe
+d_collapsed <- as.data.frame(apply(d,2,as.character))
+
+#write filename from date
+date = Sys.Date()
+filename = paste(c("../3_tweets/", date , ".csv"), collapse = "", sep = " ")
+
+#write csv
+write_csv(d_collapsed, file = filename)
+
+```
+
+
+Now we acquired a sample of 10000 tweets (or maybe less). 
+
+The following table indicates the most important variables of the Tweets.
+
+```{r}
+
+d_cut = d %>% select(user_id, status_id, screen_name, text, favorite_count, retweet_count, reply_count)
+d_cut
+
+```
+
+Now we acquired a corpus (collection of texts) of Tweets for the following sentiment analysis.
+
+## Sentiment Analysis
+
+The sentiment analysis can be done with a variety of approaches. A common way is to tokenize the text into words. That means, that we split the text into every single word. This is useful for word-based semantic and sentiment analyses like word frequencies or average sentiment of a text. 
+
+For sentiment analyses, most commonly, each single token is compared to a sentiment lexicon. The lexicons are pre-existing databases, where emotional words are valued by their valence and intensity. For instance, the word *abuse* indicate a value of -3 which indicates a negative valance and an intensity of 3. Although, the seniment analyses based on words can be quite effective, negations like "This sentence is not abusive" are overlooked by this approach. 
+
+Another approach can be a sentence-based analysis of text which includes negations. For the analysis of Tweets, this approach comes in more handy. Sentence based analysis also compare the words to sentiment lexicas, but the analyze the whole sentence instead of only single words, which can be more expensive (computational-wise) but leads to more valid results. 
+
+
+For the sentence-based sentiment analysis, the following packages should be (installed and) loaded:
+
+```{r}
+
+Packages <- c("sentimentr", "tidytext", "lubridate")
+
+lapply(Packages, library, character.only = TRUE)
+
+```
+ 
+
+## Preprocessing
+
+First we need to preprocess the corpus/dataset. You may have a large corpus of thousands of Tweets. In this case, it makes sense, to exclude Tweets, that are not necessary for the analysis (e.g., redundant Retweets)
+For this analyis we exclude all Retweets and Tweets that quote other Tweets.
+
+
+```{r}
+
+d = d %>% filter(is_quote == FALSE, is_retweet ==FALSE)
+
+```
+
+
+Now we have a clean corpus. In the next step, the sentiment lexicon needs to be prepared. 
+
+In this case, we have use an English lexicon. 
+There are multiple lexicon to choose from. 
+The r package *lexicon* therefore comes in handy.
+In this example we use the large lexicon sentiword. 
+
+Load the package *lexicon* (maybe install it before if you have not done that) and then the lexicon is automatically in your environment. 
+
+
+```{r}
+
+library(lexicon)
+
+```
+
+Now we acquired the Lexicon sentiwords. For further usage lets put it in the local environment and rename it to lexikey. Take a look if you want to. The x column indicates the words, the y column the weight or intensity.
+
+```{r}
+lexikey = hash_sentiment_sentiword
+
+lexikey
+
+```
+Now we can tokenize the Twitter Corpus. In this step, each sentence is defined as a token. Still, the single Tweets (separated by the ID) may still be grouped. 
+
+With the function *unnest_tokens()* from the package *tidytext* we can split the corpus into sentence tokens. 
+The function requires the arguments of the dataframe (d), the column where the text ist ("text"), the name of the token to create (output = "sentence"), the command to lower case the text (to_lower = TRUE), and that the tokens should be in the form of sentences (token = "sentences"). We write the new tokens dataframe into *sentence_tbl*. 
+
+```{r, message = F, warning=F}
+#Tokenize corpus
+sentence_tbl = unnest_tokens(d_cut, input = "text", token = "sentences", to_lower = TRUE, output = "sentence")
+```
+
+Now we may run the sentiment analysis function from the *sentimentr* package. This function makes it possible, to analyze the sentiment of each sentence by matching the words with the SentiWS lexicon. With a large corpus this may go on for a few minutes, depending on the computational power of your device.
+
+
+But first let me demonstrate how the *sentimentr* package works by three examples. In the following, a negativ, a positive and a mixed sentence are analized. You will see, that depending on the words that are used in the sentence, the sentiment score changes.
+
+```{r, message = F, warning=F}
+
+#neg
+sentiment("This sentence evokes angriness", polarity_dt = lexikey)
+
+#pos
+sentiment("This sentence is excellent", polarity_dt = lexikey)
+
+#mixed
+sentiment("This sentence is excellent and evokes angriness", polarity_dt = lexikey)
+
+```
+Now we can apply the same process to the whole corpus of tweets. Run the following line. 
+
+```{r, message = F, warning=F}
+
+#sentiment analyses by 
+sentiment = sentiment_by(sentence_tbl$sentence, by = sentence_tbl$status_id, polarity_dt = lexikey)
+
+
+```
+
+If you look at the newly created *sentiment* dataframe, you can see each sentence, grouped by the ID, the number of words in the sentence and the average sentiment of the sentence. 
+
+In the next step we want to join this dataframe with the initial sentence_tbl dataframe to make sense of, which Tweets or sentences indicate that level of sentiment. 
+
+```{r}
+#Join the dataframes of the sentiment analysis and the tokens
+sentence_tbl <- inner_join(y = sentiment,x = sentence_tbl)
+
+```
+
+Then we arrange the sentence_tbl by the number of likes/retweets to see, in which range of engagement the Tweets are. 
+
+
+```{r}
+#Arrange
+sentence_tbl = sentence_tbl %>% arrange(desc(favorite_count))
+```
+
+
+To acquire the average value of sentiment per Tweet, we aggregate the values for each Tweet. 
+
+
+```{r}
+#summarise with the engagement variables
+tweet_tbl = sentence_tbl %>% select(ave_sentiment, status_id, favorite_count, retweet_count) %>% group_by(status_id) %>% 
+  summarise(mean_affect = mean(ave_sentiment),
+            favorite_count = mean(favorite_count),
+            retweet_count = mean(retweet_count))
+
+```
+
+Since the average sentiment value indicates both intensity and valence, we want to disentangle that variable. 
+Therefore we calculate the absolute value of the average sentiment to gain the intensity and create three grouping variables for valence (negative -> <0, positive -> >0, neutral = 0).
+
+
+```{r}
+hist(tweet_tbl$mean_affect)
+quantile(tweet_tbl$mean_affect)
+
+tweet_tbl = tweet_tbl %>% mutate(
+  intensity = abs(mean_affect),
+  valence = case_when(
+    mean_affect > 0 ~ "positive",
+    mean_affect == 0 ~ "neutral",
+    mean_affect < 0 ~ "negative"
+  ), 
+  valence = as.factor(valence)
+)
+```
+
+Let's also differantiate between very and rather positive / negative tweets.
+
+```{r}
+tweet_tbl = tweet_tbl %>% mutate(
+  valence_5 = case_when(
+    mean_affect > 0.1 ~ "very positive",
+    mean_affect > 0 & mean_affect < 0.1 ~ "positive",
+    mean_affect == 0 ~ "neutral",
+    mean_affect < 0 & mean_affect > -0.1 ~ "negative",
+    mean_affect < -0.1 ~ "very negative"
+  ), 
+  valence_5 = as.factor(valence_5)
+)
+# table(tweet_tbl$valence_5)
+
+#relevel
+tweet_tbl$valence_5 = ordered(tweet_tbl$valence_5 , levels = c("very negative", "negative","neutral","positive","very positive"))
+
+tweet_tbl %>%  select(favorite_count) %>% filter(!is.na(favorite_count))
+
+
+```
+
+
+## Descriptive and Inference Analysis
+
+
+Now we have a dataframe that includes the average sentiment of a Tweet as well as the associated engagement variables.
+
+In the next step, we want to analyze, how this engagement variables covary with the sentiment of each tweet. We want to illustrate this relation with a scatterplot and include a regression line. Since the engagement variables are counts of interactions (e.g. number of favorites, retweets, etc.), we need to run a poisson regression. To illustrate that, we plot a scatterplot without the log of the engagement and then with the log of the engagement. 
+
+But first, lets take a look at the Tweets at hand, namely how the engagement and sentiment (intensity and valence) is distributed.
+
+```{r}
+tweet_tbl %>% ggplot(aes(intensity)) + geom_histogram() +theme_minimal()
+tweet_tbl %>% ggplot(aes(valence)) + geom_bar() +theme_minimal()
+
+tweet_tbl %>% ggplot(aes(valence_5)) + geom_bar() +theme_minimal()
+
+```
+
+And for number of favorites.
+
+
+```{r}
+tweet_tbl %>% ggplot(aes(favorite_count)) + geom_histogram() +theme_minimal()
+
+
+```
+
+From this plot we see, that the number of favorites and intensity indicate a classic poisson distribution (strong floor effects, that mean, that most of the tweets indicate low are no numbers of favorites, this is normal for *count-*data).
+
+
+If we create a scatterplot now, we see, that most of the Tweets indicate a close-to-zero level of engagement and intensity.
+
+
+```{r}
+tweets = tweet_tbl %>% na.omit(tweet_tbl)
+
+### analyses with log(views_youtube) or poisson ###
+tilt_theme <- theme(axis.text.x=element_text(angle=45, hjust=1))
+
+# normal 
+affect_normal <- ggplot(tweets, aes(mean_affect, favorite_count)) +
+  geom_point() +labs(title= "") + tilt_theme
+
+affect_normal
+```
+
+But now we create the plot with the log of the favorite count and log of intensity. 
+
+
+```{r}
+# using log(views_youtube)
+affect <- ggplot(tweets, aes(mean_affect, log(favorite_count))) +
+  geom_point() +labs(title= "Log(favorite_count) by avg. sentiment") + tilt_theme +
+  labs(x = "average sentiment of each Tweet", y = "log(Likes)") 
+affect
+```
+This gives us a little better view of the relationship between the number of likes and the average sentiment.
+
+
+In the next step, we want to see, whether or not there is a significant relationship between engagement and sentiment. Therefore we run a poisson regression and add the regression line to the plot.
+
+```{r}
+# poisson regression
+
+
+poiss_aff <- glm(favorite_count ~ mean_affect + intensity + valence_5, family = "poisson", data = tweets)
+summary(poiss_aff)
+
+prediction = predict(poiss_aff)
+
+
+# add predicted log(views_youtube) to tweets
+tweets <- tweets %>% mutate(pred_affect = prediction)
+```
+
+The poisson regression's results indicate a significance for the intensity and valence on the engagement with the Tweet. But lets see descriptively, how that looks.
+
+
+```{r}
+# plot the points (actual observations), regression line
+plot_affect = ggplot(tweets, aes(intensity,log(favorite_count))) + 
+  geom_point() +
+  geom_smooth(aes(intensity, pred_affect)) +
+  labs(title= "", x = "average sentiment of tweet", y = "Log(number of favs)")
+
+plot_affect
+
+
+```
+
+Since we only modeled the intensity, which are the absolute values of the average sentiment, the regression line starts at 0 of the x-axis. Nonetheless, a small but significant relationship is recognizable.
+
+To see, how that intensity is distributed for the factor of valence, we plot a boxplot. 
+
+```{r}
+
+tweets %>% ggplot(aes(x = valence_5, y = intensity)) + geom_boxplot()
+
+```
+
+
+# Analysis of frequency of affect words
+
+Through the previous analyses we've seen, that the average sentiment may be impractical, because it is also poisson-ish distributed. Another way to analyze the Tweets is to calculate the frequency of affective words per Tweet. This way, we lose information about intensity, but we may still differentiate between negative and positive frequency. 
+
+
+First, we need to tokenize the text by words instead of sentences. 
+
+```{r}
+# calculate sentiment var
+token_tbl = d_cut %>% 
+  unnest_tokens(input = text,  output = "word",
+                to_lower = TRUE) %>% 
+  left_join(lexikey %>% rename(value = y), 
+            by = c("word" = "x")) %>% 
+  group_by(status_id) %>% 
+  summarize(affect = mean(!is.na(value)),
+            avg_sent = mean(value, na.rm=T),
+            posemo = mean(value[value>0], na.rm=T),
+            negemo = mean(value[value<0], na.rm=T)) %>% 
+  mutate_all(~replace(., is.na(.), 0))
+tweets2 = d %>% left_join(token_tbl, by = "status_id") 
+
+
+
+```
+
+
+
+
+Now we have the dataframe of all tweets including the respective frequency of affect words per tweet (also differentiated by negative and positive words).
+
+Let's see, whether we can find a relation between those values and engagement.
+
+
+```{r}
+# using log(views_youtube)
+affect <- ggplot(tweets2, aes(affect, log(favorite_count))) +
+  geom_point() +labs(title= "Log(favorite count) by % of affect words") + tilt_theme +
+  labs(x = "% of affect words in a Tweet", y = "log(favorite count)")
+
+affect
+
+
+# poisson regression
+poiss_aff <- glm(favorite_count ~ affect, family = "poisson", data = tweets2)
+summary(poiss_aff)
+
+prediction = predict(poiss_aff)
+
+
+# add predicted log(views_youtube) to tweets
+tweets2 <- tweets2 %>% mutate(pred_affect = prediction)
+
+
+# plot the points (actual observations), regression line
+plot_affect <- ggplot(tweets2, aes(affect,log(favorite_count))) + 
+  geom_point() +
+  geom_smooth(aes(affect, pred_affect)) +
+  labs(title= "Log(favorite_count) by % of affect words", x = "% of affect words in a tweet", y = "log(favorite_count)")
+
+plot_affect
+
+
+```
+
+So we see, that the more frequent sentiment words are, the more a Tweet is favoured. 
+Can we find differences for negative and positive affect words?
+
+
+
+```{r}
+
+# poisson regression of positive affect
+poiss_pos <- glm(favorite_count ~ posemo, family = "poisson", data = tweets2)
+
+summary(poiss_pos)
+
+prediction = predict(poiss_pos)
+
+
+# add predicted log(views_youtube) to talks
+tweets2 <- tweets2 %>% mutate(pred_pos = prediction)
+
+
+# posemo plot the points (actual observations), regression line
+plot_posemo <- ggplot(tweets2, aes(posemo, log(favorite_count))) + 
+  geom_point() +
+  geom_smooth(aes(posemo, pred_pos)) +
+  labs(title= "Log(favorite_count) by % of positive affect words", x = "% of positive affect words in a tweet", y = "log(favorite_count)")
+
+plot_posemo
+
+
+
+```
+
+And for negative...
+
+```{r}
+
+# poisson regression of positive affect
+poiss_neg <- glm(favorite_count ~ negemo, family = "poisson", data = tweets2)
+
+summary(poiss_neg)
+
+prediction = predict(poiss_neg)
+
+
+# add predicted log(views_youtube) to talks
+tweets2 <- tweets2 %>% mutate(pred_neg = prediction)
+
+
+# posemo plot the points (actual observations), regression line
+plot_negemo <- ggplot(tweets2, aes(negemo, log(favorite_count))) + 
+  geom_point() +
+  geom_smooth(aes(negemo, pred_neg)) +
+  labs(title= "Log(favorite_count) by % of negative affect words", x = "% of negative affect words in a tweet", y = "log(favorite_count)")
+
+plot_negemo
+
+
+
+```
+
+
+Note: This how-to is not complete yet
