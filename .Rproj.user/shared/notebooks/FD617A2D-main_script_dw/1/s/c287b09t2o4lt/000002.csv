@@ -1,0 +1,15 @@
+"0","# calculate sentiment var
+sents_text = data %>% 
+  unnest_tokens(input = transcript,  output = ""word"",
+                to_lower = TRUE) %>% 
+  left_join(hash_sentiment_sentiword %>% rename(value = y), 
+            by = c(""word"" = ""x"")) %>% 
+  group_by(id) %>% 
+  summarize(prop_sent = mean(!is.na(value)),
+            avg_sent = mean(value, na.rm=T),
+            avg_pos_sent = mean(value[value>0], na.rm=T),
+            avg_neg_sent = mean(value[value<0], na.rm=T))
+"
+"2","Error in UseMethod(""pull"") : 
+  no applicable method for 'pull' applied to an object of class ""function""
+"

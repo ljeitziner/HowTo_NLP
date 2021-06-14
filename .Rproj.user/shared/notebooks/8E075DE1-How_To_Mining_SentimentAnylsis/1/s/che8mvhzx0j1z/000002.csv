@@ -1,0 +1,521 @@
+"0","#delete the NN stuff"
+"0","negativ = separate(data = negativ, col = V1, sep =  ""[|]"", into = ""V1"")"
+"2","Expected 1 pieces. Additional pieces discarded in 1827 rows [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, ...]."
+"0","positiv = separate(data = positiv, col = V1, sep =  ""[|]"", into = ""V1"")"
+"2","PCRE error
+	'UTF-8 error: isolated byte with 0x80 bit set'
+	for element 1486"
+"2","Expected 1 pieces. Additional pieces discarded in 1644 rows [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, ...]."
+"0","#split into single words"
+"0","einzelworte_negativ <- strsplit(as.character(negativ$V3), split ="","")"
+"0","einzelworteframe_negativ <- as.data.frame(unlist(einzelworte_negativ))"
+"0",""
+"0","einzelworte_positiv <- strsplit(as.character(positiv$V3), split ="","")"
+"0","einzelworteframe_positiv <- as.data.frame(unlist(einzelworte_positiv))"
+"0",""
+"0","#takes the number of words and creates a data frame only with the sentiment scores as many times as the word inflection occurs."
+"0","number_words <- summary(einzelworte_negativ)"
+"0",""
+"0","sentiment_score <- NULL"
+"0","for (i in 1:1827) {"
+"0","j <- 0"
+"0","while (j < as.numeric(number_words[i])) {"
+"0"," sentiment_score <- rbind(sentiment_score, negativ[i,2])"
+"0"," j <- j+1"
+"0","}"
+"0","}"
+"0",""
+"0","number_words <- summary(einzelworte_positiv)"
+"0",""
+"0","sentiment_score <- NULL"
+"0","for (i in 1:1645) {"
+"0","  j <- 0"
+"0","  while (j < as.numeric(number_words[i])) {"
+"0","    sentiment_score <- rbind(sentiment_score, positiv[i,2])"
+"0","    j <- j+1"
+"0","  }"
+"0","}"
+"0",""
+"0","#bind the sentiment score with the words"
+"0","new_negativ <- cbind(as.character(einzelworteframe_negativ[,1]), sentiment_score)"
+"2","number of rows of result is not a multiple of vector length (arg 1)"
+"0","new_negativ <- rbind(negativ[,1:2], new_negativ)"
+"0",""
+"0","new_positiv <- cbind(as.character(einzelworteframe_positiv[,1]), sentiment_score)"
+"0","new_positiv <- rbind(positiv[,1:2], new_positiv)"
+"0",""
+"0",""
+"0",""
+"0",""
+"0","lexicon = bind_rows(new_positiv, new_negativ)"
+"0","lexicon = lexicon %>% select(V1, V2) %>% rename(polarity = V2, word = V1) %>% mutate_all(.funs=tolower)"
+"0","lexicon$polarity = as.numeric(lexicon$polarity)"
+"0","lexikey = as_key(lexicon)"
+"2","One or more terms in the first column are repeated. Terms must be unique.
+  I found the following likely culprits:
+
+   * abbaue
+   * abbauen
+   * abbauten
+   * abfalle
+   * abnahmen
+   * abriss
+   * abrisse
+   * abrissen
+   * abrutsche
+   * abrutschen
+   * abschüsse
+   * abschüssen
+   * abschusses
+   * abstieg
+   * abstiege
+   * abstiegen
+   * abstoße
+   * abstürze
+   * abstürzen
+   * anerkannte
+   * anerkannten
+   * angespannt
+   * angestrengt
+   * angriff
+   * angriffe
+   * angriffen
+   * anklage
+   * anklagen
+   * anstieg
+   * anstiege
+   * anstiegen
+   * anziehen
+   * arbeitslose
+   * arbeitslosem
+   * arbeitslosen
+   * arbeitsloser
+   * aufgebracht
+   * aufgeregt
+   * aufschreie
+   * aufschreien
+   * aufstieg
+   * aufstiege
+   * aufstiegen
+   * auftrieb
+   * auftriebe
+   * auftrieben
+   * ausbeute
+   * ausbeuten
+   * ausfalle
+   * ausgeflippt
+   * ausgeglichen
+   * ausgestorben
+   * ausgeweitet
+   * ausgezeichnet
+   * ausgleiche
+   * ausgleichen
+   * ausrotten
+   * ausschalten
+   * bedrückt
+   * bedrückte
+   * bedrückten
+   * bedürftige
+   * bedürftigen
+   * befalle
+   * begrenzt
+   * begrenzte
+   * begrenzten
+   * beitritt
+   * beleidigt
+   * beleidigte
+   * beleidigten
+   * beschäftigungslose
+   * beschäftigungslosen
+   * beschäftigungsloser
+   * beschränkt
+   * beschränkte
+   * beschränkten
+   * besser
+   * bessere
+   * besserem
+   * besseren
+   * besserer
+   * besseres
+   * beste
+   * bestem
+   * besten
+   * bester
+   * bestes
+   * beunruhigste
+   * beunruhigstem
+   * beunruhigsten
+   * beunruhigster
+   * beunruhigstes
+   * beunruhigt
+   * beunruhigte
+   * beunruhigten
+   * bewundert
+   * bewunderte
+   * bewunderten
+   * blöde
+   * blödeste
+   * blödestem
+   * blödesten
+   * blödester
+   * blödestes
+   * böse
+   * defekt
+   * defekte
+   * defekten
+   * defektes
+   * deinstalliert
+   * deinstallierte
+   * deinstallierten
+   * drift
+   * driften
+   * dufte
+   * duften
+   * duftes
+   * dürre
+   * dürren
+   * ehre
+   * ehren
+   * eingeschränkt
+   * einkaufe
+   * einnahmen
+   * einstürze
+   * einstürzen
+   * elend
+   * elendes
+   * engagiert
+   * engagierte
+   * engagierten
+   * enttäuschendste
+   * enttäuschendstem
+   * enttäuschendsten
+   * enttäuschendster
+   * enttäuschendstes
+   * enttäuscht
+   * enttäuschte
+   * enttäuschten
+   * erarbeiten
+   * erbe
+   * erben
+   * erschöpft
+   * erschöpfte
+   * erschöpften
+   * erschüttert
+   * erschütterte
+   * erschütterten
+   * erschüttertest
+   * erweitert
+   * erweiterte
+   * erweiterten
+   * fasziniere
+   * faszinierest
+   * faszinieret
+   * faszinierst
+   * fasziniert
+   * faszinierte
+   * faszinierten
+   * fasziniertest
+   * fasziniertet
+   * feiern
+   * fertige
+   * fertigen
+   * feuern
+   * flüchtigen
+   * flüchtiger
+   * fortschritt
+   * fortschritte
+   * fortschritten
+   * frustriert
+   * frustrierte
+   * frustrierten
+   * fülle
+   * füllen
+   * gedrängt
+   * geeignet
+   * gefallen
+   * gefeiert
+   * gekränkt
+   * gelähmt
+   * gelohnt
+   * genervt
+   * genusse
+   * genüsse
+   * genüssen
+   * genusses
+   * gepflegt
+   * geschätzt
+   * gesorgt
+   * gesteigert
+   * gestiegen
+   * gewachsen
+   * gewalttätige
+   * gewalttätigen
+   * gewalttätiger
+   * gewinne
+   * gewinnen
+   * graue
+   * grauen
+   * grauest
+   * groteske
+   * grotesken
+   * hartnäckig
+   * hartnäckige
+   * hartnäckigem
+   * hartnäckigen
+   * hartnäckiger
+   * hartnäckigere
+   * hartnäckigerem
+   * hartnäckigeren
+   * hartnäckigerer
+   * hartnäckigeres
+   * hartnäckiges
+   * hartnäckigste
+   * hartnäckigstem
+   * hartnäckigsten
+   * hartnäckigster
+   * hartnäckigstes
+   * hasse
+   * heile
+   * heilen
+   * heiraten
+   * hingaben
+   * interessiert
+   * interessierte
+   * interessierten
+   * irre
+   * kämpfe
+   * kämpfen
+   * klage
+   * klagen
+   * kontroverse
+   * kontroversen
+   * koordiniert
+   * koordinierte
+   * koordinierten
+   * krachen
+   * krächen
+   * krank
+   * kranke
+   * kranken
+   * kritisch
+   * kritische
+   * kritischem
+   * kritischen
+   * kritischer
+   * kritischere
+   * kritischerem
+   * kritischeren
+   * kritischerer
+   * kritischeres
+   * kritisches
+   * kritischste
+   * kritischstem
+   * kritischsten
+   * kritischster
+   * kritischstes
+   * krude
+   * leere
+   * leide
+   * liebe
+   * lieben
+   * lobe
+   * loben
+   * magere
+   * magerst
+   * mangel
+   * milde
+   * missbrauche
+   * miste
+   * morde
+   * morden
+   * motiviert
+   * motivierte
+   * motivierten
+   * niedergeschlagen
+   * pflege
+   * privilegien
+   * qualifiziert
+   * qualifizierte
+   * qualifizierten
+   * reif
+   * reife
+   * reifen
+   * reparatur
+   * reparaturen
+   * roste
+   * rosten
+   * rutsche
+   * rutschen
+   * schätze
+   * schätzen
+   * schelte
+   * schelten
+   * schlage
+   * schlimmer
+   * schmerze
+   * schmerzen
+   * schmuck
+   * schmucke
+   * schmucken
+   * schmuckes
+   * schmuggel
+   * schmuggeln
+   * schocke
+   * schocken
+   * schubse
+   * schubsen
+   * schulden
+   * schwäche
+   * schwächen
+   * sicheren
+   * sorge
+   * sorgen
+   * sorgest
+   * sorget
+   * sorgst
+   * sorgt
+   * sorgte
+   * sorgten
+   * sorgtest
+   * sorgtet
+   * spende
+   * spenden
+   * spröde
+   * stärke
+   * stärken
+   * steigend
+   * stillstand
+   * stillstände
+   * stillständen
+   * stolz
+   * stolze
+   * stolzes
+   * störungsfreier
+   * stoße
+   * streike
+   * streiken
+   * streite
+   * streiten
+   * strenge
+   * stürze
+   * stürzen
+   * stütze
+   * stützen
+   * töten
+   * trauer
+   * treue
+   * trotte
+   * trotten
+   * überlegenerer
+   * überlegner
+   * überlegnerem
+   * überzeugt
+   * überzeugte
+   * überzeugten
+   * umgetauscht
+   * umtausche
+   * umtauschen
+   * unerhört
+   * unerhörte
+   * unerhörtem
+   * unerhörten
+   * unerhörter
+   * unerhörtere
+   * unerhörterem
+   * unerhörteren
+   * unerhörterer
+   * unerhörteres
+   * unerhörtes
+   * unerhörteste
+   * unerhörtestem
+   * unerhörtesten
+   * unerhörtester
+   * unerhörtestes
+   * unterlassen
+   * unterlaufen
+   * untreue
+   * unverantwortliche
+   * upgrade
+   * verachten
+   * verband
+   * verbände
+   * verbänden
+   * verbot
+   * verboten
+   * verdammt
+   * verdammte
+   * verdammten
+   * verdienst
+   * verdient
+   * verdiente
+   * verdienten
+   * veredelung
+   * verehrt
+   * verehrte
+   * verehrten
+   * vergelten
+   * vergöttert
+   * vergötterte
+   * vergötterten
+   * verletzt
+   * verletzte
+   * verletzten
+   * vernichten
+   * verrate
+   * verrückte
+   * verrückten
+   * verrückter
+   * verschlang
+   * verschlänge
+   * verschlangen
+   * verschlängen
+   * verschlängest
+   * verschlänget
+   * verschlangst
+   * verschlängst
+   * verschlangt
+   * verschlängt
+   * verschlinge
+   * verschlingen
+   * verschlingest
+   * verschlinget
+   * verschlingst
+   * verschlingt
+   * versklavt
+   * versklavte
+   * versklavten
+   * verstand
+   * verstoße
+   * vertraute
+   * vertrauter
+   * verzichte
+   * verzichten
+   * verzweifelt
+   * vorsorge
+   * vorsorgen
+   * wahr
+   * wahre
+   * wahren
+   * wärme
+   * wärmst
+   * widerrufen
+   * würdig
+   * würdige
+   * würdigen
+   * zugaben
+   * zugreifen
+   * zusammenhalte
+   * zusammenhalten
+   * zweifeln
+
+These terms have been dropped
+"
+"2","One or more terms in the first column appear as terms in the comparison.
+  I found the following dubious fellas:
+
+   * immense
+   * massive
+   * not
+
+These terms have been removed.
+"

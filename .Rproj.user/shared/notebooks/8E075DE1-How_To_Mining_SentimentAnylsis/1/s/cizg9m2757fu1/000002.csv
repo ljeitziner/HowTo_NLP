@@ -1,0 +1,6 @@
+"0","# using log(views_youtube)"
+"0","affect <- ggplot(tweets2, aes(affect, log(favorite_count))) +"
+"0","  geom_point() +labs(title= ""Log(favorite count) by % of affect words"") + tilt_theme +"
+"0","  labs(x = ""% of affect words in a Tweet"", y = ""log(favorite count)"")"
+"0",""
+"0","affect"

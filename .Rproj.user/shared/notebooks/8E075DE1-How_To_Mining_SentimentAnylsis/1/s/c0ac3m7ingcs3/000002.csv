@@ -1,0 +1,6 @@
+"0","#summarise with the engagement variables"
+"0","tweet_tbl = sentence_tbl %>% select(ave_sentiment, status_id, favorite_count, retweet_count) %>% group_by(status_id) %>% "
+"0","  summarise(mean_affect = mean(ave_sentiment),"
+"0","            favorite_count = mean(favorite_count),"
+"0","            retweet_count = mean(retweet_count))"
+"0",""

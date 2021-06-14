@@ -1,0 +1,5 @@
+"0",""
+"0","#sentiment analyses by "
+"0","sentiment = sentiment_by(sentence_tbl$sentence, by = sentence_tbl$status_id, polarity_dt = lexikey)"
+"0",""
+"0",""

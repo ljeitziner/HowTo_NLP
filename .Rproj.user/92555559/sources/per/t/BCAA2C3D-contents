@@ -1,0 +1,904 @@
+---
+title: "Markdown presentation"
+author: "Loris Jeitziner, Olivia Fischer and Nieves Schwab"
+date: "11/24/2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+## Emotional Arcs in TED Talks 
+
+What does a great commercial, a sales pitch and a scientific presentation have in common? 
+
+They all try to tell (or sell) a compelling story. 
+
+Stories are appealing to us, as they use a tight and logical structure, they help us organize information. It has a logical progression, the classic story structure always looks the same pattern, first the context is set, and the hero is introduced. The hero has a problem or a challenge he has to solve. He struggles, then struggles more and finally he resolves the crises. Happy end. 
+
+This ups and downs in the stories are an important element, they capture the audience's interest and take them on an emotional journey. Kurt Vonnegut, proposed that there exist six "universal shapes" of stories, or emotional arcs, that follow specific pattern in stories. 
+
+We propose that emotion plays an important role in storytelling. And we wanted to analyze to which extent. To this purpose we have been looking at data from the masters of storytelling, the speakers of TED Talks. 
+
+According to Wikipedia: TED conferences (Technology, Entertainment, Design) is a media organization that posts talks online for free distribution, under the slogan "ideas worth spreading". They address a wide range of topics within the research and practice of science and culture, often thorugh storytelling. The speakers are given a maximum of 18 minutes to present ideas in the most innovative and engaging way as they can. 
+
+The dataset that we analyze contains 2,386 TED Talks from the years 1972 to 2017. It contains variables like the speaker, headline of the talk, duration, year of publication and... the number of views!
+
+In the last two weeks we have been analyzing this dataset in a data-driven manner, exploring if emotion/valence has an influence on the number of views a talk has. For this purpose we have defined the variable of views as our DV, defining talks with more views are more successful. 
+
+Additional variables contained in the dataset stem from LIWC. They are, for example: word count, tone, number of pos (e.g. ppron), affect,...
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(tidytext)
+library(dplyr)
+library(stringr)
+library(stopwords)
+library(ggplot2)
+library(textdata)
+library(readr)
+library(tidyverse)
+library(ggrepel) 
+library(viridis)
+library(stringr) 
+library(grid)
+library(wordcloud)
+library(ClusterR) 
+library(cluster) 
+library(kmed)
+library(pander)
+# install.packages("cstab")
+library(cstab)
+# install.packages("sentimentr")
+library(sentimentr)
+library(caret)
+# install.packages("party")
+library(party)
+# install.packages("partykit")
+library(partykit)
+library(lubridate)
+
+#round numbers
+options(scipen=999)
+
+```
+
+# Data preparation
+```{r, message = F, warning=F}
+#load data  
+
+data = read_csv("data/TED_dirk.csv", locale = locale(encoding = "UTF-8"))
+data2 = read_csv("data/ted.csv", locale = locale(encoding = "UTF-8"))
+
+# data = read_csv("data/ted.csv", locale = locale(encoding = "UTF-8"))
+# data$posemo
+
+# str_replace_all(data$duration, "[:alpha:]" , "")
+
+#change duration to date/time format
+#omit letters
+data = data %>% mutate(
+  duration = str_replace_all(data$duration, "[:alpha:]" , "")
+)
+#add colon
+data = data %>% mutate(
+  duration = str_replace_all(data$duration, "[:blank:]" , ":")
+)
+#define as time
+data = data %>% mutate(
+  duration = ms(data$duration)
+)
+
+#define time since upload
+data = data %>% mutate(
+  days_since_upload = difftime("2020-12-31", upload_date_youtube, units = "days")
+)
+
+
+#add likes/dislikes ratio
+data = data %>% mutate(
+  like_dislike_ratio = dislike/likes
+)
+```
+
+
+```{r}
+
+#wie sehen die Daten aus?
+# table(!is.na(data$id_youtube))
+# table(!is.na(data$views_youtube))
+
+
+
+```
+
+
+# Data cleaning
+
+
+```{r}
+
+#here we try to clean the data from the 2017 problematic
+
+
+### TOP-Down approach ###
+
+#omit all independent ted talks
+# unique(data$event)
+
+#mark all TEDx events
+data = data %>% mutate(
+  tedx = case_when(
+    #identify TEDx events
+    str_detect(data$event, "TEDx") ~ "TEDx",
+    !str_detect(data$event, "TEDx") ~ "TED"
+  )
+)
+
+# unique(data$tedx)
+data$tedx = as.factor(data$tedx)
+#filter out all TEDx events
+# data = data %>% filter(tedx == "TED")
+
+
+
+### Bottom up Analysis ###
+#define bad data and good data
+data = data %>% mutate(
+  good_bad = case_when(
+    (upload_date >= "2017-06-01" & log(views) < 13.5) ~ 1,
+    !(upload_date >= "2017-06-01" & log(views) < 13.5)  ~ 0
+    ) 
+)
+data$good_bad = as.factor(data$good_bad)
+data$event = as.factor(data$event)
+# table(data$event)
+# data = data %>% filter(!is.na(good_bad))
+# data = na.omit(data)
+
+
+#filter
+bad_data = data %>% filter(upload_date >= "2017-06-01" & log(views) < 13.5)
+good_data = data %>% filter(!(upload_date >= "2017-06-01" & log(views) < 13.5))
+
+#omit recent videos (since 2020/01/01)
+# data = data %>% filter(upload_date <= "2020-01-01")
+
+
+### lasso analysis of what predicts good/bad data ###
+
+train_index <- createDataPartition(data$good_bad, p = .8, list = FALSE)
+# train and test sets
+data_train <- data %>% select(id, duration, views, views_youtube, likes, dislike, tedx, good_bad, days_since_upload,like_dislike_ratio ) %>% slice(train_index)
+data_test  <- data %>% select(id, duration, views, views_youtube, likes, dislike, tedx, good_bad, days_since_upload,like_dislike_ratio ) %>% slice(-train_index)
+
+data_train <- data_train %>% mutate_if(is.character, factor)
+data_test <- data_test %>% mutate_if(is.character, factor)
+
+
+# Tuning ------------------------------------------------------------------
+
+# install.packages("glmnet")
+
+# Set training method to "none" for simple fitting
+ctrl_cv <- trainControl(method = "cv", number = 10)
+
+
+
+# Lasso -------------------------------------------------------------------
+
+
+
+# Vector of lambda values to try
+lambda_vec <- seq(.001, .0003, length=100)
+
+# 
+# # lasso regression
+# grad_tune_glm <- train(form = good_bad ~ .,
+#                        data = data_train,
+#                        method = "glmnet",
+#                        trControl = ctrl_cv,
+#                        preProcess = c("center", "scale"),  
+#                        tuneGrid = expand.grid(alpha = 1, 
+#                                               lambda = lambda_vec),
+#                        na.action = na.pass)
+
+# 
+# predictions_lasso <- grad_tune_glm %>% predict(data_test)
+# 
+# plot(grad_tune_glm)
+# 
+# coef(grad_tune_glm$finalModel, 
+#      grad_tune_glm$bestTune$lambda)
+
+
+
+
+```
+
+```{r}
+#alle nicht youtube entfernen
+data = data %>% filter(!is.na(views_youtube))
+
+summary_by_event = data %>% group_by(event) %>% summarise(
+  mean_views = mean(views, na.rm = FALSE),
+  sd_views = sd(views, na.rm = FALSE)
+)
+
+table(complete.cases(data$views))
+
+# unique(summary_by_event$event)
+
+summary_by_event = summary_by_event %>% arrange(mean_views)
+summary_by_event %>%  ggplot(aes(x = reorder(event, -mean_views), y = mean_views)) + 
+  geom_point()+
+  geom_point(aes(x = event, y = sd_views))
+
+data %>% ggplot(aes(x = reorder(event, -views), y = log(views))) + 
+  geom_boxplot()
+
+events_number = as.data.frame(table(data$event))
+colnames(events_number) = c("event","freq")
+summary_by_event = summary_by_event %>% left_join(events_number)
+
+```
+
+
+```{r}
+# data %>% filter(event=="TED-Ed") %>%  select(upload_date, views) %>% arrange(upload_date)  %>% ggplot(show.legend = FALSE,aes(x = upload_date, y = log(views))) +
+#   geom_point(show.legend = FALSE) + 
+#   labs(x = "Upload Date", y = 'log(Views)') + 
+#   theme_minimal()+ scale_x_continuous(breaks = as.Date(c("2010-01-01", "2012-01-01", "2014-01-01", "2016-01-01", "2018-01-01","2020-01-01" )))
+
+data = data %>% mutate(
+  ted_ed = case_when(event=="TED-Ed" ~ 1,
+                     event!="TED-Ed" ~ 0
+))
+
+#Take a look at the data
+data %>%  arrange(upload_date) %>% ggplot(show.legend = FALSE,aes(x = upload_date, y = log(views), color = event)) +
+  geom_point(show.legend = FALSE) + 
+  labs(x = "Upload Date", y = 'log(Views)') + 
+  theme_minimal()+ scale_x_continuous(breaks = as.Date(c("2010-01-01", "2012-01-01", "2014-01-01", "2016-01-01", "2018-01-01","2020-01-01" )))
+
+#It seems that at some point (end of 2017) the number of videos exploaded. also there are now more videos with less views
+data %>% select(upload_date, views) %>% arrange(upload_date) %>% ggplot(aes(upload_date)) +
+  geom_histogram() + 
+  labs(x = "Upload Date") + 
+  theme_minimal()
+
+#are the variables views and views_youtube similar?
+both_views = as.data.frame(cbind(data$views, data$views_youtube))
+both_views = na.omit(both_views)
+cor(both_views$V1, both_views$V2)
+  
+
+#compare good and bad data
+# 
+# good_data %>% select(upload_date, views) %>% arrange(upload_date) %>% ggplot(aes(x = upload_date, y = log(views))) +
+#   geom_point() + 
+#   labs(x = "Upload Date", y = 'log(Views)') + 
+#   theme_minimal()+ scale_x_continuous(breaks = as.Date(c("2010-01-01", "2012-01-01", "2014-01-01", "2016-01-01", "2018-01-01","2020-01-01" )))
+# 
+# bad_data %>% select(upload_date, views) %>% arrange(upload_date) %>% ggplot(aes(x = upload_date, y = log(views))) +
+#   geom_point() + 
+#   labs(x = "Upload Date", y = 'log(Views)') + 
+#   theme_minimal()+ scale_x_continuous(breaks = as.Date(c("2010-01-01", "2012-01-01", "2014-01-01", "2016-01-01", "2018-01-01","2020-01-01" )))
+
+
+
+
+```
+# The thing about the bad data after 2017
+
+It seems, that after 2017 there was a surge in uploads of new TED talks, which also were mainly unsuccesfull in terms of views. A lot of the "new" data even misses information about views. 
+Exluding TEDx talks and cutting of recent talks (since 2020) was a good method to "clean" the data. 
+
+
+# Emotional Arcs in TED Talks
+
+We are interested in discovering if there are distinct emotional arcs and if they can predict the number of views a TED Talk will have. To plot the sentiment arcs first we have to tokenize the transcripts of the talks and add the sentiment values. 
+
+Tokenize the data and add sentiment
+```{r, message = F, warning=F}
+
+#tokenize the transcripts 
+# data$transcript
+token_tbl = unnest_tokens(data, input = "transcript", token = "words", to_lower = TRUE, output = "word")
+
+#relative position of the word for the sentiment analysis -> arc, also add wordcount for LIWC analysis
+token_tbl = token_tbl %>% group_by(id) %>% mutate(
+  word_count = n(),
+  pos = 1:n(),
+  rel_pos = (pos-1)/max(pos-1)
+)
+
+#load the sentiment word from the "afinn" repository
+afinn = get_sentiments("afinn")
+
+#join the tokens with the sentiment words
+token_tbl <- inner_join(y = afinn,x = token_tbl)
+
+token_tbl %>% select(word, value) 
+
+# token_tbl = token_tbl %>% group_by(id) %>% mutate(
+#   pos = 1:n(),
+#   rel_pos = (pos-1)/max(pos-1)
+# )
+
+#add percentage of affect words
+token_tbl = token_tbl %>% group_by(id) %>% mutate(
+  affect = (n()/word_count)
+)
+
+#add percentage of pos and neg words to the token_tbl
+token_tbl_pos = token_tbl %>% filter(value>0) %>% group_by(id) %>% mutate(
+  posemo = n()/word_count,
+  negemo = 0
+)
+token_tbl_neg = token_tbl %>% filter(value<0) %>% group_by(id) %>% mutate(
+  negemo = n()/word_count,
+  posemo = 0
+)
+
+#bind both subsets
+token_tbl = rbind(token_tbl_neg, token_tbl_pos)
+
+#arrange by id and rel_pos
+token_tbl = token_tbl %>% arrange(id, rel_pos)
+
+#overwrite zeroes
+token_tbl = token_tbl %>% group_by(id) %>% mutate(
+  negemo = max(negemo),
+  posemo = max(posemo)
+)
+
+# token_tbl %>% select(word, word_count, pos, rel_pos, value, posemo, negemo, affect )
+
+
+#add posemo and negemo back to the wide data set
+posnegemo_wide = aggregate(id ~ posemo + negemo + affect, mean, data = token_tbl)
+talks = data %>% left_join(posnegemo_wide, by = "id")
+
+#see if it worked
+# talks %>% select(id,affect,  posemo, negemo, views)
+
+# talks$affect
+
+```
+
+
+# Let's look at the data: 
+
+```{r}
+#poisson regression analysis of talks
+
+#remove na talks
+talks = talks %>% filter(!is.na(affect), .preserve = TRUE)
+talks = talks %>% filter(!is.na(views_youtube), .preserve = TRUE)
+talks = talks %>% filter(!is.na(like_dislike_ratio), .preserve = TRUE)
+
+#Convert the variable "date_published" into an actual date 
+talks$upload_date <- as.Date(talks$upload_date, format = "%y/%m/%d")
+
+#Select all the talks published between 2006 and 2016. 
+#We use date_published instead of year_filmed. 
+
+talks %>% select(upload_date) %>%  arrange(desc(upload_date))
+
+# talks = talks %>% filter(upload_date > "2005-12-31" & upload_date < "2019-01-01")
+
+
+### analyses with log(views_youtube) or poisson ###
+tilt_theme <- theme(axis.text.x=element_text(angle=45, hjust=1))
+
+# normal (not log)
+affect_normal <- ggplot(talks, aes(affect, views_youtube)) +
+  geom_point() +labs(title= "Log(views_youtube) by % of affect words") + tilt_theme
+
+affect_normal 
+
+
+# using log(views_youtube)
+affect <- ggplot(talks, aes(affect, log(views_youtube))) +
+  geom_point() +labs(title= "Log(views_youtube) by % of affect words") + tilt_theme +
+  labs(x = "% of affect words in a talk", y = "log(views_youtube)")
+
+affect 
+
+# positive emotion
+pos <- ggplot(talks, aes(posemo, log(views_youtube))) +
+  geom_point() +labs(title= "Log(views_youtube) by % of positive affect words") + tilt_theme
+
+pos 
+
+talks %>% select(views_youtube, affect) %>% filter(!is.na(views_youtube))
+
+# poisson regression
+poiss_aff <- glm(views_youtube ~ affect + days_since_upload, family = "poisson", data = talks)
+summary(poiss_aff)
+
+#without days since upload --> wow, the model fits way worse. thats really good!
+poiss_aff2 <- glm(views_youtube ~ affect, family = "poisson", data = talks)
+summary(poiss_aff2)
+
+
+#the chisq test shows the significance of days since upload as a predictor and even better fit! 
+anova(poiss_aff2, poiss_aff, test = "Chisq")
+
+
+prediction = predict(poiss_aff)
+
+# poisson regression of positive affect
+poiss_pos <- glm(views_youtube ~ posemo + days_since_upload, family = "poisson", data = talks)
+poiss_pos2 <- glm(views_youtube ~ posemo, family = "poisson", data = talks)
+
+summary(poiss_pos)
+
+#the chisq test shows the significance of days since upload as a predictor and even better fit! 
+anova(poiss_pos2, poiss_pos, test = "Chisq")
+
+# add predicted log(views_youtube) to talks
+talks <- cbind(talks, pred_posemo = predict(poiss_pos))
+
+
+
+# add predicted log(views_youtube) to talks
+talks <-   cbind(talks, pred_affect = prediction)
+
+# nrow(talks)
+
+
+
+# plot the points (actual observations), regression line
+plot_affect <- ggplot(talks, aes(affect,log(views_youtube))) + 
+  geom_point() +
+  geom_smooth(aes(affect, pred_affect)) +
+  labs(title= "Log(views_youtube) by % of affect words", x = "% of affect words in a talk", y = "log(views_youtube)")+
+  ylim(8,18)+xlim(0,0.2)
+
+plot_affect
+
+# posemo plot the points (actual observations), regression line
+plot_posemo <- ggplot(talks, aes(posemo, log(views_youtube))) + 
+  geom_point() +
+  geom_smooth(aes(posemo, pred_posemo)) +
+  labs(title= "Log(views_youtube) by % of positive affect words", x = "% of positive affect words in a talk", y = "log(views_youtube)")+
+  ylim(8,18)+xlim(0,0.2)
+
+plot_posemo
+
+
+
+
+
+
+#vergleich des alten datensatzes
+
+#scale affect to the same level as the new dataset
+data2$affect = data2$affect /100
+
+#run regression
+poiss_aff2 = glm(views_as_of_06162017 ~ affect, data = data2, family = "poisson")
+summary(poiss_aff2)
+
+# length(data2$affect)
+
+#filer out NA's
+data2 = data2 %>% filter(!is.na(affect))
+
+#Plot scatterplot between affect and log(views)
+ggplot(data2, aes((affect),log(views_as_of_06162017))) + 
+  geom_point() +
+  geom_smooth(aes(affect, predict(poiss_aff2))) +
+  labs(title= "Log(views) by % of affect words", x = "% of affect words in a talk", y = "log(views)")+ 
+  ylim(8,18)+xlim(0,0.2)
+
+
+
+
+###analyze models with sandwich for more robust standard errors
+
+# install.packages("sandwich")
+library(sandwich)
+
+
+cov.m1 <- vcovHC(poiss_aff, type="HC0")
+std.err <- sqrt(diag(cov.m1))
+r.est <- cbind(Estimate= coef(poiss_aff), "Robust SE" = std.err,
+"Pr(>|z|)" = 2 * pnorm(abs(coef(poiss_aff)/std.err), lower.tail=FALSE),
+LL = coef(poiss_aff) - 1.96 * std.err,
+UL = coef(poiss_aff) + 1.96 * std.err)
+
+r.est
+
+with(poiss_aff, cbind(res.deviance = deviance, df = df.residual,
+  p = pchisq(deviance, df.residual, lower.tail=FALSE)))
+
+
+
+### models with engagement
+
+
+# poisson regression of affect and engagement controlled for days_since_upload
+poiss_eng <- glm(views ~ affect + days_since_upload + like_dislike_ratio, family = "poisson", data = talks)
+poiss_eng2 <- glm(views_youtube ~ affect + days_since_upload, family = "poisson", data = talks)
+
+summary(poiss_eng)
+
+exp(coef(poiss_eng))
+
+range(talks$affect)
+
+#the chisq test shows the significance of days since upload as a predictor and even better fit! 
+anova(poiss_eng2, poiss_eng, test = "Chisq")
+
+# add predicted log(views_youtube) to talks
+talks <- cbind(talks, pred_eng = predict(poiss_eng))
+
+
+
+# plot the points (actual observations), regression line
+plot_eng <- ggplot(talks, aes(affect,log(views_youtube))) + 
+  geom_point() +
+  geom_smooth(aes(affect, pred_eng), method = "lm") +
+  labs(title= "Log(views_youtube) by % of affect words", x = "% of affect words in a talk", y = "log(views_youtube)")+
+  ylim(8,18)+xlim(0,0.2)
+
+plot_eng
+
+```
+
+
+Smooth sentiment arcs
+```{r}
+# smoothing function for smoothing the sentiment values relative to the position
+smooth = function(pos, value){ 
+  sm = sapply(pos, function(x) {
+    weights = dnorm(pos, x, max(pos) / 10)
+    sum(value * (weights / sum(weights)))
+    })
+  }
+
+# define the sentiment values as sent_values per talk
+token_tbl = token_tbl %>% group_by(id) %>% mutate(
+  sent_values = smooth(pos, value)
+  # z_sent_values = scale(sent_values)
+)
+
+#z standardize the sentiment values
+token_tbl$z_sent_values = scale(token_tbl$sent_values)
+```
+
+Sentiment Arcs for the most viewed talks 
+```{r}
+# plot sentiment arcs not z transformed to compare, color by title
+sent_top_views <- token_tbl %>% filter(views >= 18253944) %>% ggplot(aes(rel_pos, sent_values, color= title)) +geom_line(lwd=2) +  labs(x = "Position", y = 'Sentiment',  title= "Emotional Arcs for the 10 most viewed TED Talks") + theme_minimal()
+sent_top_views
+```
+
+Sentiment Arcs for the less viewed talks 
+```{r}
+sent_last_views <- token_tbl %>% filter(views <= 218993) %>% ggplot(aes(rel_pos, sent_values, color= title)) +geom_line(lwd=2) +  labs(x = "Position", y = 'Sentiment',  title= "Emotional Arcs for the 10 less viewed TED Talks") + theme_minimal()
+sent_last_views
+```
+
+
+# Chunking and analysis of clusters to predict number of views
+
+
+```{r include=FALSE, echo=FALSE}
+library(cluster)
+#reduce dataset to necessary variables 
+data_cut = token_tbl %>% select(id, presenter,views, sent_values, z_sent_values, value, rel_pos, pos, word)
+
+#make chunks
+n_chunk = 5
+
+data_cut = data_cut %>% group_by(id) %>% mutate(
+  chunk = round(rel_pos/n_chunk, 2)*100
+)
+
+
+#make means per chunk
+data_cut = data_cut %>% group_by(id) %>% group_by(chunk) %>% mutate(
+  mean_chunk = mean(z_sent_values),
+  mean_rel = mean(rel_pos)
+)
+
+#Cluster analyse
+#Korrelationen
+data_agg = aggregate(data=data_cut, z_sent_values ~ id + chunk, mean)
+colnames(data_agg) = c("id", "chunk","z_sent_values")
+data_agg$z_sent_values = as.numeric(data_agg$z_sent_values)
+data_agg$id = as.character(data_agg$id)
+
+data_agg = data_agg %>% group_by(id) %>% mutate(
+  n_group = n()
+)
+
+data_agg = data_agg %>% filter(n_group==21)
+
+data_agg = data_agg %>% group_by(id) %>% mutate(
+  n_group = n()
+)
+
+# select and widen
+data_agg_2 = data_agg %>% select(id, z_sent_values)
+
+
+#wrangle data into matrix
+data_agg$z_sent_values = as.numeric(data_agg$z_sent_values)
+data_agg_2 = as.data.frame(data_agg_2)
+data_agg_2 = data_agg_2 %>% select(id, z_sent_values)
+data_agg_2 = data_agg_2 %>% group_by(id) %>% mutate(row = row_number())
+data_wide = data_agg_2 %>%pivot_wider(names_from=id, values_from=z_sent_values) %>% select(-row)
+
+#make it to a matrix
+data_wide = as.matrix(data_wide)
+
+#transpose the matrix for the calculation of euclidian distances
+t_wide = t(data_wide)
+```
+
+We used the daisy function for calculating euclidian distances. Furthermore, with the k-mediods approach, we built clusters.
+
+```{r include=TRUE, echo=TRUE}
+#setting seed for clustering
+set.seed(240)  
+
+#number of possible cluster numbers
+kseq=c(2:75)
+
+#find out number of clusters with cstab
+distance = cDistance(t_wide, kseq, method = "hierarchical", linkage = "ward.D",
+kmIter = 10, gapIter = 10)
+
+plot(distance$Jumps)
+plot(distance$Gaps)
+plot(distance$Slopes)
+
+
+
+#calculate euclidian distances
+dist_data <- daisy(t_wide, stand=TRUE)
+
+# cluster analysis with fast k mediod method -> 10 clusters
+# cluster_analysis_10 <- fastkmed(dist_data, ncluster = 10, iterate = 5000)
+# cluster_analysis <- fastkmed(dist_data, ncluster = 8, iterate = 5000)
+# cluster_analysis <- pam(dist_data, k=24 )
+
+cluster_analysis <- diana(dist_data, diss=TRUE, metric="euclidean")
+
+
+# Es wird das Kriterium "height" in Abhängigkeit der letzten 10 Fusionierungsschritte dargestellt.
+height <- sort(cluster_analysis$height)
+Schritt <- (length(height)-9):length(height)
+height <- height[(length(height)-9):length(height)]
+data4 <- data.frame(Schritt, height)
+# library(ggplot2)
+ggplot(data4, aes(x=Schritt, y=height)) + geom_line() 
+
+```
+
+
+```{r include=TRUE, echo=FALSE}
+# Vektor "Cluster" mit Clusterzugehörigkeit
+cluster <-  cutree(as.hclust(cluster_analysis), k = 18)  # Clusteranzahl k anpassen
+cluster = as.data.frame(cluster)
+ids = rownames(cluster)
+ids = as.data.frame(ids)
+cluster$id = ids
+
+# implement cluster information in token dataframe
+# cluster_id = cluster_analysis$clustering
+# cluster = cluster_analysis[["clustering"]]
+# cluster = as.data.frame(cluster)
+
+
+colnames(cluster) = c("cluster", "id")
+
+cluster$id = as.numeric(unlist(cluster$id))
+
+# uni_ids = unique(token_tbl$id)
+# uni_ids2 = unique(cluster$id)
+
+
+#add cluster info to token_tbl
+token_tbl_w_cluster <- token_tbl %>%
+  left_join(cluster, by = "id")
+
+# token_tbl_w_cluster[,120:128]
+
+token_tbl_w_cluster = token_tbl_w_cluster %>% filter(!is.na(cluster))
+
+```
+
+The clusters actually show some tendencies, that there are multiple arcs in TED - Talks. 
+
+```{r visualize clusters, include=TRUE, echo=FALSE}
+
+token_tbl %>%   ggplot(aes(rel_pos, sent_values)) +
+  geom_line(size = 1) + 
+  labs(x = "Position", y = 'Sentiment') + 
+  theme_minimal() + ylim(-2, 2)
+
+token_tbl_w_cluster %>%   ggplot(aes(rel_pos, z_sent_values,group = id, color=cluster)) +
+  geom_line(size = 0.1) + 
+  labs(x = "Position", y = 'Sentiment') + 
+  theme_minimal() + facet_wrap(. ~ cluster)
+
+
+token_tbl_w_cluster %>% filter(cluster==1 | cluster==14 | cluster ==5 | cluster ==7 | cluster ==13 | cluster == 12) %>% ggplot(aes(rel_pos, z_sent_values,group = id, color=cluster)) +
+  geom_line(size = 0.1) + 
+  labs(x = "Position", y = 'Sentiment') + 
+  theme_minimal() + facet_wrap(. ~ cluster)
+
+token_tbl_w_cluster %>% filter(cluster==1) %>% ggplot(aes(rel_pos, z_sent_values,group = id, color=id)) +
+  geom_line(size = 0.1) + 
+  labs(x = "Position", y = 'Sentiment') + 
+  theme_minimal() 
+
+token_tbl_w_cluster$cluster = as.factor(token_tbl_w_cluster$cluster)
+
+token_tbl_w_cluster%>% ggplot(aes(x = reorder(cluster, -log(views)), y  = log(views))) +
+  geom_boxplot() + 
+  labs(x = "Cluster", y = 'log(views)') + 
+  theme_minimal() 
+
+
+token_tbl_w_cluster %>% filter(cluster==13 | cluster ==15  | cluster ==18 | cluster== 12) %>% ggplot(aes(x = reorder(cluster, -log(views)), y  = log(views))) +
+  geom_boxplot() + 
+  labs(x = "Cluster", y = 'log(views)') + 
+  theme_minimal() 
+
+token_tbl_w_cluster %>% filter(cluster==13 | cluster ==15 | cluster ==18 | cluster== 12) %>% ggplot(aes(rel_pos, z_sent_values,group = id, color=id)) +
+  geom_line(size = 0.1) + 
+  labs(x = "Position", y = 'Sentiment') + 
+  theme_minimal() + facet_wrap(.~cluster)
+
+```
+
+
+## Let's take a closer look at two clusters.
+
+Cluster 7 shows more of a positive linear function, whereas cluster 2 looks like a negative quadratic function.
+
+```{r visualize clusters2, include=TRUE, echo=FALSE}
+
+# token_tbl_w_cluster$mean_sent_clust_pos  
+
+
+# token_tbl_w_cluster %>% ggplot(aes(rel_pos, z_sent_values,group = id,color=cluster)) +
+#   geom_line(size = 0.1) + labs(x = "Position", y = 'Sentiment') + 
+#   theme_minimal() + facet_wrap(. ~ cluster) 
+
+# + geom_smooth(method = "auto", se=FALSE , color="red")
+
+
+token_tbl_w_cluster %>% filter(cluster==2) %>%  ggplot(aes(rel_pos, z_sent_values,group = id,color=id)) +
+  geom_line(size = 0.1) + labs(x = "Position", y = 'Sentiment') + 
+  theme_minimal() 
+
+#add mean sentiment value per talk
+token_tbl_w_cluster = token_tbl_w_cluster %>% group_by(id) %>% mutate(
+  mean_sent = mean(z_sent_values)
+)
+#Durchschnittsark berechnen für jeden cluster
+
+```
+
+
+## What's the distribution of views in the seperate clusters?
+
+
+
+```{r include=TRUE, echo=FALSE}
+# install.packages("sandwich")
+# install.packages("msm")
+
+
+
+require(sandwich)
+require(msm)
+pred = token_tbl_w_cluster %>% select(id, cluster, views, mean_sent)
+
+
+pred = aggregate(data = pred, id ~ cluster + views + mean_sent, mean)
+pred$id = as.factor(pred$id)
+pred$cluster = as.factor(pred$cluster)
+
+
+model1 = glm(formula = views ~ cluster + mean_sent, data = pred, family = "poisson")
+model0 = glm(formula = views ~ 1, data = pred, family = "poisson")
+
+
+cov.m1 <- vcovHC(model1, type="HC0")
+std.err <- sqrt(diag(cov.m1))
+r.est <- cbind(Estimate= coef(model1), "Robust SE" = std.err,
+"Pr(>|z|)" = 2 * pnorm(abs(coef(model1)/std.err), lower.tail=FALSE),
+LL = coef(model1) - 1.96 * std.err,
+UL = coef(model1) + 1.96 * std.err)
+
+r.est
+
+with(model1, cbind(res.deviance = deviance, df = df.residual,
+  p = pchisq(deviance, df.residual, lower.tail=FALSE)))
+
+
+
+anova(model1, model0)
+
+# summary(model0)
+summary(model1)
+
+## create the plot
+pred %>% ggplot( aes(y = log(views), x = reorder(cluster, -log(views)), colour = cluster)) +
+  geom_point(aes(), alpha=.5, position=position_jitter(h=.2)) +
+  labs(x = "", y = "")
+
+pred %>%  ggplot(aes(log(views) ,color=cluster, fill=cluster)) +
+  geom_histogram() + 
+  labs(x = "Views", y = 'Count') + 
+  theme_minimal() + facet_wrap(. ~ cluster)
+```
+
+*Conclusion:* They are still heavily skewed.
+
+## But do clusters predict number of views?
+
+```{r include=TRUE, echo=FALSE}
+
+#Effektstärke, Modellgütevergleich, 
+
+
+
+
+```
+
+*Conclusion:* This preliminary analysis actually indicates, that cluster 7 significantly differs form the other clusters. But do we believe, that some clusters are more predictive of success (numbers of views) than others? *NO*
+
+
+## Possible reason for this outcome
+
+```{r include=TRUE, echo=FALSE}
+pred %>% filter(cluster ==18)  %>%  ggplot(aes(views ,color=cluster, fill=cluster)) +
+  geom_histogram() + 
+  labs(x = "Views", y = 'Count') + 
+  theme_minimal() + facet_wrap(. ~ cluster)
+```
+
+*Conclusion:* The data is heavily skewed. In Cluster 7 we see some really viral TED talks, which most likely explains the results of the linear model. 
+
+
+
+# Approach with sentimentr package
+
+```{r}
+
+
+#tokenize the transcripts 
+# data$transcript
+token_sentences = unnest_tokens(data, input = "transcript", token = "sentences", to_lower = TRUE, output = "sentence")
+
+#relative position of the word for the sentiment analysis -> arc, also add wordcount for LIWC analysis
+token_sentences = token_sentences %>% group_by(id) %>% mutate(
+  sentence_count = n(),
+  pos = 1:n(),
+  rel_pos = (pos-1)/max(pos-1)
+)
+
+
+### DOES NOT WORK YET ###
+# token_sentences = get_sentences(data$transcript)
+# sentiment=sentiment(token_sentences)
+
+#load the sentiment word from the "afinn" repository
+afinn = get_sentiments("afinn")
+
+#join the tokens with the sentiment words
+token_tbl <- inner_join(y = afinn,x = token_tbl)
+
+
+```
+

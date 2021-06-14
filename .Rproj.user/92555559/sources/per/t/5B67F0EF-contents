@@ -1,0 +1,35 @@
+# install.packages("tidytext")
+# install.packages("ggraph")
+
+# if (!requireNamespace("remotes", quietly = TRUE)) {
+  # install.packages("remotes")
+# }
+
+
+# remotes::install_github("ropensci/rtweet")
+# install.packages("digest")
+
+# load twitter library - the rtweet library is recommended now over twitteR
+library(rtweet)
+# plotting and pipes - tidyverse!
+library(ggplot2)
+library(dplyr)
+# text mining library
+library(tidytext)
+# plotting packages
+# library(igraph)
+# library(qgraph)
+
+
+get_token()
+
+# 20201020 ----------------------------------------------------------------
+
+
+ch_tweets_20210321 <- search_tweets(q = "", n = 100000,
+                                    lang = "de",geocode = "47.05,8.27,100km",
+                                    include_rts = FALSE, retryonratelimit = TRUE, type = "recent", verbose=TRUE)
+ch_tweets_20210321_coll <- apply(ch_tweets_20210321,2,as.character)
+
+write.csv(ch_tweets_20210321_coll, file="3_tweets/ch_tweets2_20201020_collapsed.csv")
+

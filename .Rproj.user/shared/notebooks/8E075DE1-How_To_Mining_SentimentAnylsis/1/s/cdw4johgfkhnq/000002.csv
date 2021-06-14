@@ -1,0 +1,7 @@
+"0",""
+"0","#Install the package, uncomment the next line if necessary  "
+"0","# install.packages(""rtweet"")"
+"0",""
+"0","#Load library"
+"0","library(rtweet)"
+"0",""

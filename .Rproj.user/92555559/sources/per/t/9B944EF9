@@ -1,0 +1,32 @@
+{
+    "id": "9B944EF9",
+    "path": null,
+    "project_path": null,
+    "type": "r_dataframe",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1616324106205.0,
+    "source_on_save": false,
+    "relative_order": 5,
+    "properties": {
+        "expression": "sentence_tbl",
+        "caption": "sentence_tbl",
+        "totalObservations": "33290",
+        "displayedObservations": "33290",
+        "variables": "9",
+        "cacheKey": "0D1E791A",
+        "object": "sentence_tbl",
+        "environment": "",
+        "contentUrl": "grid_resource/gridviewer.html?env=&obj=sentence_tbl&cache_key=0D1E791A&max_cols=50",
+        "preview": "0"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 32370017462452277,
+    "encoding": "",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1616324106205,
+    "read_only": false,
+    "read_only_alternatives": []
+}

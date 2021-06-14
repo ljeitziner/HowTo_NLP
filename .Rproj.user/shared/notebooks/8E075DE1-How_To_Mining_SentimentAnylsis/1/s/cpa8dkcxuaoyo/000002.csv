@@ -1,0 +1,4 @@
+"0",""
+"0","# load sentiment files"
+"0","negativ <- read.table(""../../Lexica/Deutsch/SentiWS_v2.0_Negative.txt"", fill = TRUE,encoding = ""UTF-8"")"
+"0","positiv <- read.table(""../../Lexica/Deutsch/SentiWS_v2.0_Positive.txt"", fill = TRUE,encoding = ""UTF-8"")"

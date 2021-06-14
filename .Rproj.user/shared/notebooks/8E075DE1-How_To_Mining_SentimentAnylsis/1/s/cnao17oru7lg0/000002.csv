@@ -1,0 +1,2 @@
+"0","#Tokenize corpus"
+"0","sentence_tbl = unnest_tokens(d_cut, input = ""text"", token = ""sentences"", to_lower = TRUE, output = ""sentence"")"

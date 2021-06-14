@@ -1,0 +1,263 @@
+---
+title: "Sentiment Analysis"
+author: "Jeitziner Loris"
+date: "18/03/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r echo=FALSE, include=FALSE}
+library(dplyr)
+library(tidytext)
+library(dplyr)
+library(stringr)
+library(stopwords)
+library(ggplot2)
+library(textdata)
+library(readr)
+library(tidyverse)
+library(ggrepel) 
+library(viridis)
+library(stringr) 
+library(grid)
+library(wordcloud)
+library(ClusterR) 
+library(cluster) 
+library(kmed)
+library(pander)
+# install.packages("cstab")
+library(cstab)
+# install.packages("sentimentr")
+library(sentimentr)
+library(caret)
+# install.packages("party")
+library(party)
+# install.packages("partykit")
+library(partykit)
+library(lubridate)
+
+#round numbers
+options(scipen=999)
+
+
+
+
+
+```
+
+
+```{r echo=FALSE, include=FALSE}
+
+d = read.csv(file="../1_data/ch_tweets2_20201020_collapsed.csv")
+d = d %>% filter(is_quote == FALSE, is_retweet ==FALSE)
+
+# select only relevant variables
+d = d %>% select(X, user_id, text, favorite_count, retweet_count, quote_count)
+
+```
+
+
+
+Tokenize the data and add sentiment
+```{r, message = F, warning=F}
+#tokenize the transcripts 
+# data$transcript
+token_tbl = unnest_tokens(d, input = "text", token = "words", to_lower = TRUE, output = "word")
+
+#relative position of the word for the sentiment analysis -> arc, also add wordcount for LIWC analysis
+token_tbl = token_tbl %>% group_by(X) %>% mutate(
+  word_count = n(),
+  pos = 1:n(),
+  rel_pos = (pos-1)/max(pos-1)
+)
+```
+
+
+```{r, message = F, warning=F}
+
+#manually delete the |NN stuff, it doesn't work very well in R. Regex: \|\|[A-Z]*
+
+#load sentiment files
+negativ <- read.table("../../Lexica/Deutsch/SentiWS_v2.0_Negative.txt", fill = TRUE,encoding = "UTF-8")
+positiv <- read.table("../../Lexica/Deutsch/SentiWS_v2.0_Positive.txt", fill = TRUE,encoding = "UTF-8")
+
+#delete the NN stuff
+negativ = separate(data = negativ, col = V1, sep =  "[|]", into = "V1")
+positiv = separate(data = positiv, col = V1, sep =  "[|]", into = "V1")
+
+#split into single words
+einzelworte_negativ <- strsplit(as.character(negativ$V3), split =",")
+einzelworteframe_negativ <- as.data.frame(unlist(einzelworte_negativ))
+
+einzelworte_positiv <- strsplit(as.character(positiv$V3), split =",")
+einzelworteframe_positiv <- as.data.frame(unlist(einzelworte_positiv))
+
+#takes the number of words and creates a data frame only with the sentiment scores as many times as the word inflection occurs.
+number_words <- summary(einzelworte_negativ)
+
+sentiment_score <- NULL
+for (i in 1:1827) {
+j <- 0
+while (j < as.numeric(number_words[i])) {
+ sentiment_score <- rbind(sentiment_score, negativ[i,2])
+ j <- j+1
+}
+}
+
+number_words <- summary(einzelworte_positiv)
+
+sentiment_score <- NULL
+for (i in 1:1645) {
+  j <- 0
+  while (j < as.numeric(number_words[i])) {
+    sentiment_score <- rbind(sentiment_score, positiv[i,2])
+    j <- j+1
+  }
+}
+
+#bind the sentiment score with the words
+new_negativ <- cbind(as.character(einzelworteframe_negativ[,1]), sentiment_score)
+new_negativ <- rbind(negativ[,1:2], new_negativ)
+
+new_positiv <- cbind(as.character(einzelworteframe_positiv[,1]), sentiment_score)
+new_positiv <- rbind(positiv[,1:2], new_positiv)
+
+
+
+
+lexicon = bind_rows(new_positiv, new_negativ)
+lexicon = lexicon %>% select(V1, V2) %>% rename(polarity = V2, word = V1) %>% mutate_all(.funs=tolower)
+lexicon$polarity = as.numeric(lexicon$polarity)
+lexikey = as_key(lexicon)
+# sentiment_by("Ich habe einen grossen Penis abfall", polarity_dt = lexikey)
+
+
+
+```
+
+
+```{r, message = F, warning=F}
+#
+sentence_tbl = unnest_tokens(d, input = "text", token = "sentences", to_lower = TRUE, output = "sentence")
+sentiment = sentiment_by(sentence_tbl$sentence, by = sentence_tbl$X, polarity_dt = lexikey)
+
+
+```
+
+
+```{r, message = F, warning=F}
+#join the tokens with the sentiment words
+# token_tbl <- inner_join(y = lexicon,x = token_tbl)
+sentence_tbl <- inner_join(y = sentiment,x = sentence_tbl)
+sentence_tbl = sentence_tbl %>% arrange(desc(favorite_count))
+tweet_tbl = sentence_tbl %>% select(ave_sentiment, X, favorite_count, retweet_count) %>% group_by(X) %>% 
+  summarise(mean_affect = mean(ave_sentiment),
+            favorite_count = mean(favorite_count),
+            retweet_count = mean(retweet_count))
+
+# token_tbl %>% select(word, polarity) 
+
+
+# token_tbl = token_tbl %>% group_by(id) %>% mutate(
+#   pos = 1:n(),
+#   rel_pos = (pos-1)/max(pos-1)
+# )
+
+
+
+# #add percentage of pos and neg words to the token_tbl
+# sentence_tbl = sentence_tbl %>% filter(polarity>0) %>% group_by(X) %>% mutate(
+#   posemo = n()/word_count,
+#   negemo = 0
+# )
+# token_tbl_neg = token_tbl %>% filter(polarity<0) %>% group_by(X) %>% mutate(
+#   negemo = n()/word_count,
+#   posemo = 0
+# )
+
+#bind both subsets
+# token_tbl = rbind(token_tbl_neg, token_tbl_pos)
+
+#arrange by id and rel_pos
+# token_tbl = token_tbl %>% arrange(X, rel_pos)
+
+#overwrite zeroes
+# token_tbl = token_tbl %>% group_by(X) %>% mutate(
+#   negemo = max(negemo),
+#   posemo = max(posemo))
+# 
+# token_tbl = token_tbl %>% mutate(
+#   affect = abs(polarity)
+# )
+
+# token_tbl %>% select(word, word_count, pos, rel_pos, polarity, posemo, negemo, affect )
+
+
+#add posemo and negemo back to the wide data set
+# posnegemo_wide = aggregate(X ~ affect , mean, data = token_tbl)
+# posnegemo_wide = token_tbl %>% group_by(X) %>% summarise(affect = mean(affect))
+
+# talks = d %>% left_join(posnegemo_wide, by = "X") %>% filter(!is.na(affect))
+```
+
+
+
+
+```{r, message = F, warning=F}
+tweets = tweet_tbl
+
+### analyses with log(views_youtube) or poisson ###
+tilt_theme <- theme(axis.text.x=element_text(angle=45, hjust=1))
+
+# normal (not log)
+affect_normal <- ggplot(tweets, aes(mean_affect, favorite_count)) +
+  geom_point() +labs(title= "Log(Likes) by % of affect words") + tilt_theme
+
+affect_normal 
+
+
+# using log(views_youtube)
+affect <- ggplot(tweets, aes(mean_affect, log(favorite_count))) +
+  geom_point() +labs(title= "Log(favorite_count) by % of affect words") + tilt_theme +
+  labs(x = "% of affect words in a talk", y = "log(views_youtube)")
+
+affect 
+
+
+# tweets %>% select(views_youtube, affect) %>% filter(!is.na(views_youtube))
+
+# poisson regression
+poiss_aff <- glm(favorite_count ~ mean_affect, family = "poisson", data = tweets)
+summary(poiss_aff)
+
+prediction = predict(poiss_aff)
+
+
+# add predicted log(views_youtube) to tweets
+tweets <-   cbind(tweets, pred_affect = prediction)
+
+
+
+
+# plot the points (actual observations), regression line
+plot_affect = ggplot(tweets, aes(mean_affect,log(favorite_count))) + 
+  geom_point() +
+  geom_smooth(aes(mean_affect, pred_affect)) +
+  labs(title= "", x = "average sentiment of tweet by number of favs", y = "Log(number of favs)")
+
+plot_affect
+
+
+tweets = tweets %>% arrange(desc(favorite_count))
+
+
+
+
+```
+
+
+
+

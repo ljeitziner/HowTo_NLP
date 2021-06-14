@@ -1,0 +1,4 @@
+"0","#Join the dataframes of the sentiment analysis and the tokens"
+"0","sentence_tbl <- inner_join(y = sentiment,x = sentence_tbl)"
+"2","Joining, by = ""status_id""
+"

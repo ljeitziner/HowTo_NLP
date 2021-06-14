@@ -1,0 +1,5 @@
+"0","# using log(views_youtube)"
+"0","affect <- ggplot(tweets, aes(mean_affect, log(favorite_count))) +"
+"0","  geom_point() +labs(title= ""Log(favorite_count) by avg. sentiment"") + tilt_theme +"
+"0","  labs(x = ""average sentiment of each Tweet"", y = ""log(Likes)"") "
+"0","affect"
